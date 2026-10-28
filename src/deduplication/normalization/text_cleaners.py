@@ -151,3 +151,4 @@ def normalize_upc_ean(code: Optional[str]) -> Optional[str]:
             return digits
 
     return digits
+

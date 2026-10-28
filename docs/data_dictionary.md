@@ -95,3 +95,4 @@ When records fail data-quality checks, they are routed to `quarantine_records` w
 | `EMPTY_INPUT` | File has 0 bytes or no content | Blank file |
 | `MALFORMED_DATE` | Date or timestamp cannot be parsed as ISO 8601 | `"2026/99/99"` or future date of birth |
 | `MALFORMED_NUMERIC` | Numeric value violates range constraints | Negative `unit_price` (`-19.99`) |
+

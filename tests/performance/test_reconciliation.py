@@ -45,3 +45,4 @@ def test_reconciliation_and_report_generation(tmp_path: Path):
     md = reporter.format_markdown_report(report_data)
     assert "Reconciliation Conservation Check" in md
     assert "PASSED" in md
+

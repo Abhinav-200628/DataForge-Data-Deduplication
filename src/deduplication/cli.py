@@ -167,8 +167,9 @@ def handle_benchmark(args: argparse.Namespace) -> int:
     bench_dir.mkdir(parents=True, exist_ok=True)
     entity = EntityType.CUSTOMER if args.entity.lower() == "customer" else EntityType.PRODUCT
 
-    csv_path = bench_dir / f"{args.entity}_{args.count}.csv"
-    gt_path = bench_dir / f"{args.entity}_{args.count}_ground_truth.json"
+    entity_plural = f"{args.entity.lower()}s"
+    csv_path = bench_dir / f"{entity_plural}_{args.count}.csv"
+    gt_path = bench_dir / f"{entity_plural}_{args.count}_ground_truth.json"
 
     print(f"[*] Preparing benchmark dataset: {args.count} {args.entity} records...")
     gen_start = time.perf_counter()
@@ -179,7 +180,12 @@ def handle_benchmark(args: argparse.Namespace) -> int:
     gen_time = time.perf_counter() - gen_start
     print(f"[+] Dataset generation took {gen_time:.2f}s")
 
+    import os
+    import platform
+    import tracemalloc
+
     print("\n[*] Executing Benchmark Pipeline...")
+    tracemalloc.start()
     pipeline = DeduplicationPipeline(
         entity_type=entity,
         db_path=args.db,
@@ -188,16 +194,23 @@ def handle_benchmark(args: argparse.Namespace) -> int:
     bench_start = time.perf_counter()
     metrics = pipeline.run(input_path=csv_path)
     total_bench_time = time.perf_counter() - bench_start
+    _, peak_bytes = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    peak_mb = peak_bytes / (1024 * 1024)
 
     throughput = metrics.input_count / metrics.elapsed_seconds if metrics.elapsed_seconds > 0 else 0.0
 
     print("\n" + "=" * 60)
     print("           BENCHMARK PERFORMANCE SUMMARY")
     print("=" * 60)
+    print(f"Machine OS:            {platform.platform()}")
+    print(f"CPU Cores:             {os.cpu_count()}")
+    print(f"Python Version:        {platform.python_version()}")
     print(f"Entity Domain:         {entity.value}")
     print(f"Total Input Records:   {metrics.input_count}")
     print(f"Valid Records:         {metrics.valid_count}")
     print(f"Pipeline Elapsed Time: {metrics.elapsed_seconds:.3f}s")
+    print(f"Peak Memory (Traced):  {peak_mb:.2f} MB")
     print(f"Overall Throughput:    {throughput:,.1f} records/second")
     print(f"Golden Masters:        {metrics.master_records_created}")
     print(f"Quarantined Records:   {metrics.quarantined_count}")
@@ -206,7 +219,24 @@ def handle_benchmark(args: argparse.Namespace) -> int:
     # Generate accuracy report against ground truth
     reporter = ReportGenerator(db_path=args.db)
     report_data = reporter.generate_run_report(metrics.run_id, ground_truth_path=gt_path)
+    report_data["benchmark_hardware"] = {
+        "os": platform.platform(),
+        "cpu_count": os.cpu_count(),
+        "python_version": platform.python_version(),
+        "peak_memory_mb": round(peak_mb, 2),
+        "throughput_records_per_sec": round(throughput, 1),
+    }
     md_report = reporter.format_markdown_report(report_data)
+    # Append hardware & memory section to report
+    hardware_section = (
+        f"\n## 5. Benchmark Hardware & Resource Profile\n\n"
+        f"- **Operating System**: `{platform.platform()}`\n"
+        f"- **CPU Count**: `{os.cpu_count()} logical cores`\n"
+        f"- **Python Runtime**: `{platform.python_version()}`\n"
+        f"- **Peak Traced Memory**: `{peak_mb:.2f} MB`\n"
+        f"- **Throughput**: `{throughput:,.1f} records/second`\n"
+    )
+    md_report += hardware_section
     report_file = args.output_dir / "benchmark_report.md"
     report_file.write_text(md_report, encoding="utf-8")
     print(f"[+] Benchmark report saved to: {report_file}")
@@ -261,3 +291,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

@@ -87,3 +87,4 @@ class MasterProduct:
             "updated_at": self.updated_at,
             "record_version": self.record_version,
         }
+

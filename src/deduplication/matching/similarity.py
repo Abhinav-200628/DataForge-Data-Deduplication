@@ -45,3 +45,4 @@ def numeric_within_percentage(
     diff = abs(val_a - val_b)
     average = (val_a + val_b) / 2.0
     return (diff / average) <= tolerance
+

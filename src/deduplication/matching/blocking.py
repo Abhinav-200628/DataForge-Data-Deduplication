@@ -142,8 +142,8 @@ def generate_candidate_pairs(
     # Union of pairs within each block
     candidate_pairs: set[tuple[int, int]] = set()
     for key, indices in index.items():
-        # Avoid massive blocks (e.g. if key is too generic and matches > 2000 records)
-        if len(indices) > 2500:
+        # Avoid massive uninformative blocks (e.g. if key is too generic and matches > 150 records)
+        if len(indices) > 150:
             continue
         for i in range(len(indices)):
             for j in range(i + 1, len(indices)):

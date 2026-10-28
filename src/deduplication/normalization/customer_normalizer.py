@@ -67,3 +67,4 @@ class NormalizedCustomer:
             norm_date_of_birth=clean_text(record.date_of_birth),
             updated_at=record.updated_at,
         )
+

@@ -247,3 +247,4 @@ class SurvivorshipEngine:
             currency=best_curr,
             updated_at=latest_update,
         )
+

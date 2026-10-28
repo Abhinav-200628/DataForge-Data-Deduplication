@@ -3,3 +3,4 @@
 from deduplication.lineage.models import ManualReviewItem, RecordLineage
 
 __all__ = ["RecordLineage", "ManualReviewItem"]
+

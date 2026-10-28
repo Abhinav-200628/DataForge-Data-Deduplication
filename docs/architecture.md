@@ -153,3 +153,4 @@ In modern data pipelines, a job may be re-triggered due to network pauses, sched
    - `master_*` tables use `PRIMARY KEY (master_id)`.
    - `quarantine_records` enforces `UNIQUE(entity_type, source_system, source_record_id)`.
 3. **Atomic Upserts**: SQLite `INSERT ... ON CONFLICT DO UPDATE` ensures existing records are refreshed in-place rather than generating duplicate rows.
+

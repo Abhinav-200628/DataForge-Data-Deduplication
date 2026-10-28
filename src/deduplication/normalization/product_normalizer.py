@@ -48,3 +48,4 @@ class NormalizedProduct:
             currency=curr.upper(),
             updated_at=record.updated_at,
         )
+

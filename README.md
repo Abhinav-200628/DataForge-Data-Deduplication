@@ -36,31 +36,34 @@ A robust, enterprise-grade Master Data Management (MDM) deduplication and entity
 
 ```text
 data-deduplication-pipeline/
+├── config/                   # Configurable matching and survivorship rules (JSON)
 ├── data/
-│   ├── sample/                   # Sample datasets and isolated ground truth
-│   └── synthetic/                # Large generated scale datasets
+│   ├── sample/               # Sample datasets and isolated ground truth
+│   └── synthetic/            # Large generated scale datasets
 ├── docs/
-│   ├── architecture.md           # Architecture, transitive merge protection, and design diagrams
-│   └── data_dictionary.md        # Schemas, field constraints, and rejection taxonomy
+│   ├── architecture.md       # Architecture, transitive merge protection, and design diagrams
+│   ├── benchmark_results.md  # Official 100,000-record scale benchmark audit report
+│   └── data_dictionary.md    # Schemas, field constraints, and rejection taxonomy
 ├── src/
 │   └── deduplication/
-│       ├── cli.py                # Command-line interface (argparse subcommands)
-│       ├── orchestration.py      # Pipeline lifecycle coordinator & reconciliation
-│       ├── schemas/              # Dataclass schemas for Customer, Product, Quarantine
-│       ├── ingestion/            # Resilient CSV loader with error trapping & schema drift checks
-│       ├── normalization/        # Field cleaners (phone, email, address, SKU, UPC)
-│       ├── matching/             # RapidFuzz similarity, blocking keys, hard-conflict filters
-│       ├── survivorship/         # Deterministic field resolution & UUIDv5 master IDs
-│       ├── storage/              # SQLite persistence, WAL mode, atomic upserts, and file exports
-│       ├── lineage/              # Source-to-master audit trail and manual review queue
-│       ├── generator/            # Deterministic synthetic data generator
-│       └── reporting/            # Validation, reconciliation, and ground-truth evaluation
+│       ├── cli.py            # Command-line interface (argparse subcommands)
+│       ├── orchestration.py  # Pipeline lifecycle coordinator & reconciliation
+│       ├── schemas/          # Dataclass schemas for Customer, Product, Quarantine
+│       ├── ingestion/        # Resilient CSV loader with error trapping & schema drift checks
+│       ├── normalization/    # Field cleaners (phone, email, address, SKU, UPC)
+│       ├── matching/         # RapidFuzz similarity, blocking keys, hard-conflict filters
+│       ├── survivorship/     # Deterministic field resolution & UUIDv5 master IDs
+│       ├── storage/          # SQLite persistence, WAL mode, atomic upserts, and file exports
+│       ├── lineage/          # Source-to-master audit trail and manual review queue
+│       ├── generator/        # Deterministic synthetic data generator
+│       └── reporting/        # Validation, reconciliation, and ground-truth evaluation
 ├── tests/
-│   ├── unit/                     # Focused unit tests (schemas, normalizers, matchers, survivorship)
-│   ├── integration/              # E2E pipeline execution and rerun idempotency tests
-│   └── performance/              # Reconciliation balance and ground-truth precision/recall
-├── pyproject.toml                # Project packaging configuration
-└── README.md                     # Documentation and setup instructions
+│   ├── unit/                 # Focused unit tests (schemas, normalizers, matchers, survivorship)
+│   ├── integration/          # E2E pipeline execution and rerun idempotency tests
+│   └── performance/          # Reconciliation balance and ground-truth precision/recall
+├── pyproject.toml            # Project packaging configuration
+├── requirements.txt          # Frozen dependency requirements
+└── README.md                 # Documentation and setup instructions
 ```
 
 ---
@@ -168,21 +171,46 @@ Run the full automated test suite with `pytest`:
 pytest -v
 ```
 
-All 51 automated tests cover:
-- Schema validation and boundary checks
+All 63 automated tests cover:
+- Schema validation, data types, and boundary checks
 - Missing required header columns and schema drift
 - Malformed rows and duplicate source keys within a batch
+- Partial failure recovery and atomic database transaction rollback
 - Phone, email, address, SKU, and UPC check digit normalizers
 - Exact matching, corroborated probable matching, and borderline review cases
 - Hard-conflict vetoes (Tax ID, DOB, UPC, Brand)
-- Shared contact guard (family members sharing email/phone)
+- Shared contact guard (family members/roommates sharing email/phone)
+- Distinct surname and missing attribute safety guards
 - Unsafe transitive merge prevention (cluster conflict partitioning)
 - Deterministic survivorship, source priority, recency, and tie-breakers
-- Stable Master ID reproducibility
+- Late-arriving records recency handling
+- Stable Master ID reproducibility via UUIDv5
 - Rerun idempotency (zero duplicate master records and zero duplicate lineage rows)
 - End-to-end customer and product pipelines
 - Cross-entity schema isolation
 - Mathematical reconciliation conservation assertions
+
+---
+
+## 100,000-Record Performance Benchmark Results
+
+The pipeline includes a production-grade benchmark harness verified at **100,000 customer records** (`customers_100000.csv` ~16.4 MB):
+
+| Benchmark Metric | Measured Result | Significance |
+| :--- | :--- | :--- |
+| **Input Records** | `100,000` | Full batch load |
+| **Valid Processed Records** | `95,000` | Schema-validated, normalized, and resolved |
+| **Quarantined Records** | `5,000` | Preserved in quarantine store with root causes |
+| **Reconciliation Balance** | `100,000 == 95,000 + 5,000` | **PASSED** (Strict conservation law enforced) |
+| **Golden Master Records** | `91,776` | Final canonical master entities produced |
+| **Pairwise Precision** | **`100.00%`** | **Zero false merges** (Conservative MDM safeguards hold) |
+| **Pairwise Recall** | **`100.00%`** | Zero true duplicates missed |
+| **F1 Score** | **`1.0000`** | Complete accuracy against isolated ground-truth labels |
+| **Pipeline Elapsed Time** | `1685.03s` (~28.08 min) | End-to-end processing including dual CSV/JSON exports |
+| **Peak Memory Footprint** | `814.85 MB` | Traced with `tracemalloc` (under 1 GB RAM usage) |
+| **Throughput** | `59.3 records/second` | Single-node SQLite and CPU execution |
+
+For the complete technical breakdown and machine hardware profile, see [docs/benchmark_results.md](docs/benchmark_results.md).
 
 ---
 
@@ -213,3 +241,4 @@ All 51 automated tests cover:
 1. **Single-Node SQLite Storage**: While SQLite with WAL mode easily handles hundreds of thousands of records on a single node, multi-million record enterprise workloads should migrate to PostgreSQL, Snowflake, or Databricks Delta Lake.
 2. **Distributed Blocking with Apache Spark**: For billion-record scale, the blocking and similarity stages can be distributed across worker nodes using PySpark or DuckDB.
 3. **Active Learning / Human-in-the-Loop Feedback**: A web interface (e.g. Streamlit or React) could allow data stewards to resolve items in `manual_review_queue`, feeding steward decisions back into the model to refine matching thresholds.
+

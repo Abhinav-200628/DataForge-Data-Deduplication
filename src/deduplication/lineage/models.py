@@ -84,3 +84,4 @@ class ManualReviewItem:
     def reasons_json(self) -> str:
         """JSON serialized reasons for database storage."""
         return json.dumps(self.reasons, sort_keys=True)
+

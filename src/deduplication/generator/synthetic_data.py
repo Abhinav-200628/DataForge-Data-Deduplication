@@ -66,38 +66,45 @@ def generate_customer_dataset(
 ) -> tuple[list[dict[str, Any]], dict[str, list[str]]]:
     """
     Generate synthetic customer records with known duplicate groups and isolated ground-truth.
-
-    Returns:
-        (records_list, ground_truth_clusters_map)
+    Guarantees exact record count.
     """
     rnd = random.Random(seed)
     records: list[dict[str, Any]] = []
-    ground_truth: dict[str, list[str]] = {}  # cluster_id -> list of source_record_ids
+    ground_truth: dict[str, list[str]] = {}
 
     cluster_counter = 1
     record_counter = 1000
 
     target_duplicates = int(count * duplicate_rate)
+    if target_duplicates > 0 and target_duplicates % 2 != 0:
+        target_duplicates += 1
     target_errors = int(count * error_rate)
-    target_singles = count - target_duplicates - target_errors
 
     # 1. Generate Duplicate Clusters (Groups of 2 or 3 records)
     dupes_created = 0
     while dupes_created < target_duplicates:
+        remaining = target_duplicates - dupes_created
+        if remaining <= 1:
+            break
+        cluster_size = min(rnd.choice([2, 2, 3]), remaining)
+        if remaining - cluster_size == 1:
+            cluster_size = remaining
+
         cluster_id = f"CUST-CLUSTER-{cluster_counter:05d}"
         cluster_records: list[str] = []
 
         first = rnd.choice(FIRST_NAMES)
-        last = rnd.choice(LAST_NAMES)
-        city, state, zip_code = rnd.choice(CITIES_STATES)
+        base_last = rnd.choice(LAST_NAMES)
+        last = f"{base_last}_{cluster_counter % 500}" if count > 5000 else base_last
+        city, state, base_zip = rnd.choice(CITIES_STATES)
+        zip_code = f"{rnd.randint(10000, 99999)}" if count > 5000 else base_zip
         street = rnd.choice(STREETS)
         phone = f"555{rnd.randint(1000000, 9999999)}"
-        email = f"{first.lower()}.{last.lower()}{rnd.randint(10, 99)}@example.com"
+        email = f"{first.lower()}.{last.lower()}_{cluster_counter}@example.com"
         tax_id = f"{rnd.randint(100, 999)}-{rnd.randint(10, 99)}-{rnd.randint(1000, 9999)}"
         dob = f"{rnd.randint(1960, 2004)}-{rnd.randint(1, 12):02d}-{rnd.randint(1, 28):02d}"
 
-        cluster_size = min(rnd.choice([2, 2, 3]), target_duplicates - dupes_created + 1)
-        systems = rnd.sample(SOURCE_SYSTEMS_CUSTOMER, cluster_size)
+        systems = [SOURCE_SYSTEMS_CUSTOMER[i % len(SOURCE_SYSTEMS_CUSTOMER)] for i in range(cluster_size)]
 
         for i in range(cluster_size):
             record_id = f"SRC-CUST-{record_counter:06d}"
@@ -109,14 +116,11 @@ def generate_customer_dataset(
             rec_street = street
             rec_first = first
 
-            # Add variations to simulate realistic dirty data
             if i == 1:
-                # Slight name typo or nickname
                 if len(first) > 4:
-                    rec_first = first[:3]  # e.g. "Dan" for "Daniel"
+                    rec_first = first[:3]
                 rec_street = street.replace("St", "Street").replace("Ave", "Avenue")
             elif i == 2:
-                # Missing phone, slightly different timestamp
                 rec_phone = ""
 
             records.append({
@@ -140,41 +144,7 @@ def generate_customer_dataset(
         cluster_counter += 1
         dupes_created += cluster_size
 
-    # 2. Generate Single / Distinct Records
-    for _ in range(target_singles):
-        cluster_id = f"CUST-CLUSTER-{cluster_counter:05d}"
-        record_id = f"SRC-CUST-{record_counter:06d}"
-        cluster_counter += 1
-        record_counter += 1
-
-        first = rnd.choice(FIRST_NAMES)
-        last = rnd.choice(LAST_NAMES)
-        city, state, zip_code = rnd.choice(CITIES_STATES)
-        street = rnd.choice(STREETS)
-        phone = f"555{rnd.randint(1000000, 9999999)}"
-        email = f"{first.lower()}.{last.lower()}{rnd.randint(100, 999)}@example.com"
-        tax_id = f"{rnd.randint(100, 999)}-{rnd.randint(10, 99)}-{rnd.randint(1000, 9999)}"
-        dob = f"{rnd.randint(1960, 2004)}-{rnd.randint(1, 12):02d}-{rnd.randint(1, 28):02d}"
-
-        records.append({
-            "source_system": rnd.choice(SOURCE_SYSTEMS_CUSTOMER),
-            "source_record_id": record_id,
-            "first_name": first,
-            "last_name": last,
-            "email": email,
-            "phone": phone,
-            "street_address": street,
-            "city": city,
-            "state": state,
-            "postal_code": zip_code,
-            "country": "US",
-            "tax_id": tax_id,
-            "date_of_birth": dob,
-            "updated_at": f"2026-0{rnd.randint(1, 6)}-{rnd.randint(1, 28):02d}T12:00:00Z",
-        })
-        ground_truth[cluster_id] = [record_id]
-
-    # 3. Generate Malformed / Bad Records (Destined for Quarantine)
+    # 2. Generate Malformed / Bad Records
     for _ in range(target_errors):
         record_id = f"SRC-CUST-ERR-{record_counter:06d}"
         record_counter += 1
@@ -197,13 +167,49 @@ def generate_customer_dataset(
             "updated_at": "2026-01-01T00:00:00Z",
         }
         records.append(rec)
-        # Quarantined rows have their own single distinct label
         ground_truth[f"QUARANTINE-{record_id}"] = [record_id]
 
-    # Shuffle records deterministically so duplicates are scattered throughout the file
+    # 3. Generate Single / Distinct Records (Fill remainder up to exact count)
+    target_singles = count - len(records)
+    for _ in range(target_singles):
+        cluster_id = f"CUST-CLUSTER-{cluster_counter:05d}"
+        record_id = f"SRC-CUST-{record_counter:06d}"
+        cluster_counter += 1
+        record_counter += 1
+
+        first = rnd.choice(FIRST_NAMES)
+        base_last = rnd.choice(LAST_NAMES)
+        last = f"{base_last}_{record_counter}" if count > 5000 else base_last
+        city, state, base_zip = rnd.choice(CITIES_STATES)
+        zip_code = f"{rnd.randint(10000, 99999)}" if count > 5000 else base_zip
+        street = rnd.choice(STREETS)
+        phone = f"555{rnd.randint(1000000, 9999999)}"
+        email = f"{first.lower()}.{last.lower()}_{record_counter}@example.com"
+        tax_id = f"{rnd.randint(100, 999)}-{rnd.randint(10, 99)}-{rnd.randint(1000, 9999)}"
+        dob = f"{rnd.randint(1960, 2004)}-{rnd.randint(1, 12):02d}-{rnd.randint(1, 28):02d}"
+
+        records.append({
+            "source_system": rnd.choice(SOURCE_SYSTEMS_CUSTOMER),
+            "source_record_id": record_id,
+            "first_name": first,
+            "last_name": last,
+            "email": email,
+            "phone": phone,
+            "street_address": street,
+            "city": city,
+            "state": state,
+            "postal_code": zip_code,
+            "country": "US",
+            "tax_id": tax_id,
+            "date_of_birth": dob,
+            "updated_at": f"2026-0{rnd.randint(1, 6)}-{rnd.randint(1, 28):02d}T12:00:00Z",
+        })
+        ground_truth[cluster_id] = [record_id]
+
     rnd.shuffle(records)
 
-    # Save to disk if output_dir is provided
+    assert len(records) == count, f"Expected {count} records, but got {len(records)}"
+
     if output_dir:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -230,6 +236,7 @@ def generate_product_dataset(
 ) -> tuple[list[dict[str, Any]], dict[str, list[str]]]:
     """
     Generate synthetic product records with known duplicate groups and isolated ground-truth.
+    Guarantees exact record count.
     """
     rnd = random.Random(seed)
     records: list[dict[str, Any]] = []
@@ -239,36 +246,42 @@ def generate_product_dataset(
     record_counter = 5000
 
     target_duplicates = int(count * duplicate_rate)
+    if target_duplicates > 0 and target_duplicates % 2 != 0:
+        target_duplicates += 1
     target_errors = int(count * error_rate)
-    target_singles = count - target_duplicates - target_errors
 
     dupes_created = 0
     while dupes_created < target_duplicates:
+        remaining = target_duplicates - dupes_created
+        if remaining <= 1:
+            break
+        cluster_size = min(rnd.choice([2, 3]), remaining)
+        if remaining - cluster_size == 1:
+            cluster_size = remaining
+
         cluster_id = f"PROD-CLUSTER-{cluster_counter:05d}"
         cluster_records: list[str] = []
 
         brand, models = rnd.choice(PRODUCT_BRANDS)
         base_model = rnd.choice(models)
         upc = f"{rnd.randint(10000000000, 99999999999)}"
-        base_sku = f"{brand[:3].upper()}-{rnd.randint(100, 999)}"
+        base_sku = f"{brand[:3].upper()}-{cluster_counter:05d}"
         price = round(rnd.uniform(49.99, 1299.99), 2)
 
-        cluster_size = min(rnd.choice([2, 3]), target_duplicates - dupes_created + 1)
-        systems = rnd.sample(SOURCE_SYSTEMS_PRODUCT, cluster_size)
+        systems = [SOURCE_SYSTEMS_PRODUCT[i % len(SOURCE_SYSTEMS_PRODUCT)] for i in range(cluster_size)]
 
         for i in range(cluster_size):
             record_id = f"SRC-PROD-{record_counter:06d}"
             record_counter += 1
             cluster_records.append(record_id)
 
-            prod_name = f"{brand} {base_model}"
+            prod_name = f"{brand} {base_model} #{cluster_counter}"
             prod_price = price
             prod_sku = base_sku
 
             if i == 1:
-                # Slight word order variation or prefix
-                prod_name = f"{base_model} by {brand}"
-                prod_price = round(price * rnd.uniform(0.95, 1.05), 2)
+                prod_name = f"{base_model} #{cluster_counter} by {brand}"
+                prod_price = round(price * rnd.uniform(0.96, 1.04), 2)
             elif i == 2:
                 prod_sku = f"{base_sku}-V2"
 
@@ -288,34 +301,6 @@ def generate_product_dataset(
         ground_truth[cluster_id] = cluster_records
         cluster_counter += 1
         dupes_created += cluster_size
-
-    # Single distinct products
-    for _ in range(target_singles):
-        cluster_id = f"PROD-CLUSTER-{cluster_counter:05d}"
-        record_id = f"SRC-PROD-{record_counter:06d}"
-        cluster_counter += 1
-        record_counter += 1
-
-        brand, models = rnd.choice(PRODUCT_BRANDS)
-        base_model = rnd.choice(models)
-        prod_name = f"{brand} {base_model} Edition {rnd.randint(1, 99)}"
-        upc = f"{rnd.randint(10000000000, 99999999999)}"
-        sku = f"{brand[:3].upper()}-{rnd.randint(1000, 9999)}"
-        price = round(rnd.uniform(29.99, 1999.99), 2)
-
-        records.append({
-            "source_system": rnd.choice(SOURCE_SYSTEMS_PRODUCT),
-            "source_record_id": record_id,
-            "product_name": prod_name,
-            "brand": brand,
-            "sku": sku,
-            "upc_ean": upc,
-            "category": "Electronics",
-            "unit_price": price,
-            "currency": "USD",
-            "updated_at": f"2026-0{rnd.randint(1, 6)}-{rnd.randint(1, 28):02d}T11:00:00Z",
-        })
-        ground_truth[cluster_id] = [record_id]
 
     # Malformed products
     for _ in range(target_errors):
@@ -338,7 +323,38 @@ def generate_product_dataset(
         records.append(rec)
         ground_truth[f"QUARANTINE-{record_id}"] = [record_id]
 
+    # Single distinct products
+    target_singles = count - len(records)
+    for _ in range(target_singles):
+        cluster_id = f"PROD-CLUSTER-{cluster_counter:05d}"
+        record_id = f"SRC-PROD-{record_counter:06d}"
+        cluster_counter += 1
+        record_counter += 1
+
+        brand, models = rnd.choice(PRODUCT_BRANDS)
+        base_model = rnd.choice(models)
+        prod_name = f"{brand} {base_model} Model-{record_counter}"
+        upc = f"{rnd.randint(10000000000, 99999999999)}"
+        sku = f"{brand[:3].upper()}-{record_counter:05d}"
+        price = round(rnd.uniform(29.99, 1999.99), 2)
+
+        records.append({
+            "source_system": rnd.choice(SOURCE_SYSTEMS_PRODUCT),
+            "source_record_id": record_id,
+            "product_name": prod_name,
+            "brand": brand,
+            "sku": sku,
+            "upc_ean": upc,
+            "category": "Electronics",
+            "unit_price": price,
+            "currency": "USD",
+            "updated_at": f"2026-0{rnd.randint(1, 6)}-{rnd.randint(1, 28):02d}T11:00:00Z",
+        })
+        ground_truth[cluster_id] = [record_id]
+
     rnd.shuffle(records)
+
+    assert len(records) == count, f"Expected {count} records, but got {len(records)}"
 
     if output_dir:
         output_dir = Path(output_dir)

@@ -120,3 +120,4 @@ class TestSurvivorshipEngine:
         id2 = generate_stable_master_id(EntityType.CUSTOMER, "CRM", "REC-A")
         assert id1 == id2
         assert len(id1) == 36  # Standard UUID length
+

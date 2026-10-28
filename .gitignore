@@ -38,7 +38,9 @@ htmlcov/
 *.db-wal
 *.db-shm
 output/
+output_*/
 benchmark_output/
+benchmark_*/
 data/synthetic/
 
 # IDE & OS
@@ -46,3 +48,4 @@ data/synthetic/
 .idea/
 .DS_Store
 Thumbs.db
+

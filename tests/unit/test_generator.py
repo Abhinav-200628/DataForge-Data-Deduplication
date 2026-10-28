@@ -36,3 +36,4 @@ def test_product_generator_determinism():
 
     assert records1 == records2
     assert gt1 == gt2
+

@@ -102,3 +102,4 @@ CREATE INDEX IF NOT EXISTS idx_lineage_master ON record_lineage(master_id);
 CREATE INDEX IF NOT EXISTS idx_lineage_run ON record_lineage(run_id);
 CREATE INDEX IF NOT EXISTS idx_quarantine_run ON quarantine_records(run_id);
 CREATE INDEX IF NOT EXISTS idx_review_run ON manual_review_queue(run_id);
+

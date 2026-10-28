@@ -170,3 +170,4 @@ def resolve_clusters_safely(
         manual_reviews=manual_reviews,
         singleton_indices=singleton_indices,
     )
+

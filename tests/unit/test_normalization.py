@@ -61,3 +61,4 @@ class TestTextCleaners:
         assert calculate_gtin_check_digit("01234567890") == 5
         assert normalize_upc_ean("0-12345-67890-5") == "012345678905"
         assert normalize_upc_ean("027242923456") == "027242923456"
+

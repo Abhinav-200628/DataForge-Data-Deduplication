@@ -66,3 +66,4 @@ def test_rerun_idempotency(tmp_path: Path):
         rows_run2 = cursor.fetchall()
 
     assert rows_run1 == rows_run2, "Master IDs changed across identical runs!"
+

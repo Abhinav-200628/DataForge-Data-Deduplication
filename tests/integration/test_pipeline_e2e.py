@@ -97,3 +97,4 @@ def test_cross_entity_schema_isolation(tmp_path: Path):
 
     assert "Missing mandatory header column(s)" in str(exc_info.value)
     assert "last_name" in str(exc_info.value)
+

@@ -274,13 +274,16 @@ class CustomerMatcher:
                 attribute_scores=scores,
             )
 
-        # Borderline name similarity with matching zip code
+        # Borderline name similarity with matching zip code AND similar street address
         if (
             self.review_lower_threshold <= name_sim < self.name_fuzzy_threshold
             and a.norm_postal_code
             and a.norm_postal_code == b.norm_postal_code
+            and address_sim >= 0.70
         ):
-            reasons.append(f"Borderline name similarity ({name_sim:.2f}) with same zip code")
+            reasons.append(
+                f"Borderline name similarity ({name_sim:.2f}) with same zip code and similar address ({address_sim:.2f})"
+            )
             return MatchEvidence(
                 record_id_a=a.source_record_id,
                 record_id_b=b.source_record_id,
@@ -305,3 +308,4 @@ class CustomerMatcher:
             reasons=["Insufficient evidence to link records"],
             attribute_scores=scores,
         )
+

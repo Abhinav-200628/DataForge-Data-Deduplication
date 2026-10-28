@@ -366,3 +366,4 @@ class SQLiteRepository:
                 "SELECT COUNT(*) FROM quarantine_records WHERE entity_type = ?", (entity_type.value,)
             )
             return cursor.fetchone()[0]
+

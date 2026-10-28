@@ -36,3 +36,4 @@ class MatchEvidence:
             "hard_conflicts": self.hard_conflicts,
             "attribute_scores": {k: round(v, 4) for k, v in self.attribute_scores.items()},
         }
+

@@ -195,3 +195,4 @@ class ProductMatcher:
             reasons=["Low title similarity or differing brands"],
             attribute_scores=scores,
         )
+

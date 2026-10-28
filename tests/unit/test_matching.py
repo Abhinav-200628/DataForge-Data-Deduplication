@@ -314,3 +314,4 @@ class TestTransitiveMergeProtection:
         assert any("Transitive merge blocked" in r for r in res.manual_reviews[0].reasons)
         # All members retained as singletons to protect against false merge
         assert set(res.singleton_indices) == {0, 1, 2}
+
