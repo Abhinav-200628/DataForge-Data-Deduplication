@@ -1,0 +1,16 @@
+{
+  "entity_type": "CUSTOMER",
+  "name_exact_threshold": 0.95,
+  "name_fuzzy_threshold": 0.88,
+  "address_fuzzy_threshold": 0.85,
+  "review_lower_threshold": 0.72,
+  "allow_unknown_columns": false,
+  "source_priorities": {
+    "ERP": 100,
+    "BILLING": 90,
+    "CRM": 80,
+    "WEB": 60,
+    "MARKETING": 40,
+    "UNKNOWN": 10
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "entity_type": "PRODUCT",
+  "title_fuzzy_threshold": 0.90,
+  "price_tolerance": 0.15,
+  "review_lower_threshold": 0.75,
+  "allow_unknown_columns": false,
+  "source_priorities": {
+    "PIM": 100,
+    "SAP": 90,
+    "SHOPIFY": 80,
+    "AMAZON": 70,
+    "SCRAPED": 30,
+    "UNKNOWN": 10
+  }
+}
