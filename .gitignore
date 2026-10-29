@@ -43,6 +43,11 @@ benchmark_output/
 benchmark_*/
 data/synthetic/
 
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
 # IDE & OS
 .vscode/
 .idea/

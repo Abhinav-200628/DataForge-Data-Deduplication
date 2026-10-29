@@ -80,7 +80,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     # 4. 'report' command
     report_parser = subparsers.add_parser("report", help="Generate validation & reconciliation report.")
-    report_parser.add_argument("--run-id", required=True, help="Pipeline Run ID to inspect.")
+    report_parser.add_argument(
+        "--run-id",
+        default="latest",
+        help="Pipeline Run ID to inspect (default: 'latest' for the most recent run).",
+    )
     report_parser.add_argument(
         "--db", default=Path("pipeline.db"), type=Path, help="Path to SQLite database."
     )
@@ -244,8 +248,21 @@ def handle_benchmark(args: argparse.Namespace) -> int:
 
 
 def handle_report(args: argparse.Namespace) -> int:
+    run_id = args.run_id
+    if not run_id or run_id.lower() in ("latest", "last", "auto"):
+        repo = SQLiteRepository(args.db)
+        with repo._get_connection() as conn:
+            row = conn.execute(
+                "SELECT run_id FROM pipeline_runs ORDER BY started_at DESC LIMIT 1"
+            ).fetchone()
+            if not row:
+                print(f"[!] No pipeline runs found in database '{args.db}'. Run the pipeline first.")
+                return 1
+            run_id = row[0]
+            print(f"[*] Auto-selected latest run: {run_id}\n")
+
     reporter = ReportGenerator(db_path=args.db)
-    report_data = reporter.generate_run_report(args.run_id, ground_truth_path=args.ground_truth)
+    report_data = reporter.generate_run_report(run_id, ground_truth_path=args.ground_truth)
     if args.format == "json":
         print(json.dumps(report_data, indent=2))
     else:

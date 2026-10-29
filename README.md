@@ -32,6 +32,32 @@ A robust, enterprise-grade Master Data Management (MDM) deduplication and entity
 
 ---
 
+## Primary Actors & System Roles
+
+The pipeline architecture defines clear boundaries across five core actors:
+
+| Actor / System | Role & Responsibilities |
+| :--- | :--- |
+| **Data Engineer** | Configures matching rules, survivorship matrices, and thresholds in `config/`; executes and monitors batch runs. |
+| **Source System Producer** | Upstream operational systems (CRM, ERP, Billing, Web, Shopify, SAP) providing raw CSV/API batches. |
+| **Storage & Processing Layer** | In-memory blocking engine (RapidFuzz), graph clustering, and SQLite ACID persistent store in WAL mode. |
+| **Target Analytical Consumer** | Downstream BI dashboards, data warehouses, and analytics pipelines consuming deduplicated master entities. |
+| **Pipeline Operator / Data Steward** | Reviews borderline matches and conflict vetoes in the `manual_review_queue` via the DATAFORGE web console. |
+
+---
+
+## ID & Nomenclature Conventions
+
+The platform adheres to strict, deterministic naming and identification conventions:
+
+1. **Table & Column Names**: All database tables (`master_customers`, `record_lineage`, `quarantine_records`, `manual_review_queue`, `pipeline_runs`) and columns use lowercase `snake_case`.
+2. **Deterministic Master IDs**: Generated using `UUIDv5` under a dedicated project DNS namespace (`6ba7b810-9dad-11d1-80b4-00c04fd430c8`) seeded by `(entity_type, anchor_source_system, anchor_source_record_id)`. This guarantees that identical source entities always resolve to the exact same Master ID across independent runs.
+3. **Execution Run IDs**: Formatted as `RUN-<12-character hex>` (e.g. `RUN-83a6a998429f`) generated at pipeline startup and stamped on every lineage record, quarantine entry, and review ticket.
+4. **Timestamps**: All temporal fields (`created_at`, `updated_at`, `started_at`, `ended_at`) strictly use **ISO 8601 UTC** formatted strings (`YYYY-MM-DDTHH:MM:SSZ` or ISO-8601 with timezone offset).
+5. **Source Traceability**: Every record retains its raw originating `source_system` and `source_record_id` so no entity is ever anonymized or disconnected from its upstream lineage.
+
+---
+
 ## Folder Structure
 
 ```text
@@ -44,8 +70,21 @@ data-deduplication-pipeline/
 │   ├── architecture.md       # Architecture, transitive merge protection, and design diagrams
 │   ├── benchmark_results.md  # Official 100,000-record scale benchmark audit report
 │   └── data_dictionary.md    # Schemas, field constraints, and rejection taxonomy
+├── frontend/                 # DATAFORGE Enterprise React + Vite + Tailwind UI
+│   ├── src/
+│   │   ├── components/       # Reusable UI cards, tables, modals, sidebar, header
+│   │   ├── pages/            # Overview, Runs, Customers, Products, Review, DQ, Reports
+│   │   ├── services/         # Typed API client
+│   │   └── types/            # TypeScript data contracts
+│   ├── package.json          # Node dependencies (React, Vite, Recharts, Lucide, Tailwind)
+│   └── vite.config.ts        # Proxy to FastAPI backend on port 8000
 ├── src/
 │   └── deduplication/
+│       ├── api/              # FastAPI enterprise REST backend
+│       │   ├── app.py        # FastAPI server & CORS setup
+│       │   ├── routes.py     # Endpoints for runs, records, review queue, data quality
+│       │   ├── models.py     # Pydantic v2 schemas
+│       │   └── service.py    # Thread-safe pipeline execution & SQLite access
 │       ├── cli.py            # Command-line interface (argparse subcommands)
 │       ├── orchestration.py  # Pipeline lifecycle coordinator & reconciliation
 │       ├── schemas/          # Dataclass schemas for Customer, Product, Quarantine
@@ -60,9 +99,10 @@ data-deduplication-pipeline/
 ├── tests/
 │   ├── unit/                 # Focused unit tests (schemas, normalizers, matchers, survivorship)
 │   ├── integration/          # E2E pipeline execution and rerun idempotency tests
-│   └── performance/          # Reconciliation balance and ground-truth precision/recall
+│   ├── performance/          # Reconciliation balance and ground-truth precision/recall
+│   └── test_api.py           # FastAPI endpoint integration tests
 ├── pyproject.toml            # Project packaging configuration
-├── requirements.txt          # Frozen dependency requirements
+├── requirements.txt          # Frozen dependency requirements (Python)
 └── README.md                 # Documentation and setup instructions
 ```
 
@@ -97,6 +137,50 @@ pip install numpy pandas rapidfuzz pytest
 # Add source directory to python path or editable install
 pip install -e .
 ```
+
+---
+
+## Running the DATAFORGE Enterprise Web Platform (Full-Stack UI)
+
+The platform includes a production-ready dark-theme web dashboard (**React 18 + Vite + Tailwind CSS + Recharts + Lucide React**) connected to a real-time **FastAPI** backend reading directly from `output/pipeline.db`.
+
+### Quick Start Option 1: One-Click Script (Easiest)
+Run either of these files from the project root:
+* **PowerShell**: `.\start.ps1`
+* **Windows CMD / Explorer**: Double-click `start.bat`
+
+This automatically launches both backend and frontend in separate dedicated windows and opens `http://localhost:5173` in your default browser.
+
+### Quick Start Option 2: Two PowerShell Terminals
+
+#### Terminal 1 — Start the FastAPI Backend:
+```powershell
+# Method A (Direct via .venv - Recommended for Windows, requires no activation):
+.venv\Scripts\python -m uvicorn deduplication.api.app:app --host 127.0.0.1 --port 8000 --reload
+
+# Method B (If your .venv is already activated in this terminal):
+uvicorn deduplication.api.app:app --host 127.0.0.1 --port 8000 --reload
+```
+* Interactive Swagger API Docs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+* Backend Health Check: [http://127.0.0.1:8000/api/health](http://127.0.0.1:8000/api/health)
+
+#### Terminal 2 — Start the React Web Frontend:
+```powershell
+cd frontend
+npm install   # Only needed on first run
+npm run dev
+```
+* Open your browser at: **[http://localhost:5173](http://localhost:5173)**
+
+### 8 Integrated UI Views
+1. **Overview Dashboard**: 6 real-time KPI metrics, match outcome doughnut chart, quarantine taxonomy bar chart, and execution timeline.
+2. **Pipeline Runs**: Interactive trigger to launch Customer or Product deduplication jobs with live execution status.
+3. **Customer Master Catalog**: Search, filter, and inspect golden customer identities with contributing source-record lineage popups.
+4. **Product Master Catalog**: Searchable product masters with UPC/SKU/brand attributes and survivorship lineage audit.
+5. **Review Queue Steward Console**: Triage ambiguous match pairs, inspect similarity scores and conflict flags, and record audit notes.
+6. **Data Quality & Quarantine**: Breakdown of validation rejections with full raw CSV line inspectors.
+7. **Reports & Reconciliation**: Audit mathematical balance conservation ($\text{Input} = \text{Valid} + \text{Quarantine}$) and evaluate ground-truth precision/recall.
+8. **Settings & Rule Configuration**: Inspect active blocking, matching thresholds, and survivorship policies.
 
 ---
 
@@ -151,13 +235,21 @@ python -m deduplication.cli run \
 ```
 
 ### 4. Generate Validation & Reconciliation Report
-Produces a complete Markdown or JSON report verifying data quality, reconciliation balance, and ground-truth accuracy:
+Produces a complete Markdown or JSON report verifying data quality, reconciliation balance, and ground-truth accuracy.
+You can specify a specific Run ID, or use `latest` (or omit `--run-id`) to automatically inspect the most recent run:
 ```bash
+# Inspect latest run:
 python -m deduplication.cli report \
-    --run-id <RUN_ID> \
+    --run-id latest \
     --db output/pipeline.db \
     --ground-truth data/sample/customers_500_ground_truth.json \
     --format markdown
+
+# Or inspect a specific run:
+python -m deduplication.cli report \
+    --run-id RUN-83a6a998429f \
+    --db output/pipeline.db \
+    --ground-truth data/sample/customers_500_ground_truth.json
 ```
 
 ### 5. Inspect the Manual Review Queue
@@ -178,6 +270,29 @@ python -m deduplication.cli benchmark \
     --db benchmark.db \
     --output-dir benchmark_1k
 ```
+
+---
+
+## Idempotency, Failure Recovery & Backfill Behavior
+
+In real-world data engineering, jobs frequently fail due to bad networks, disk timeouts, or killed worker containers. The pipeline provides robust operational safeguards:
+
+### 1. Atomic Transactions & Partial Failure Recovery
+- All SQLite write operations within a run are executed inside an atomic transaction (`BEGIN TRANSACTION ... COMMIT`).
+- If an unexpected error occurs during processing or export, the transaction triggers an immediate `ROLLBACK`.
+- The run record is marked as `FAILED` with an explicit stack trace in `error_summary`, ensuring **zero partial writes or orphaned records** remain in the database.
+
+### 2. Idempotent Safe Reruns
+- Tables enforce composite unique constraints (`UNIQUE(entity_type, source_system, source_record_id)` in `record_lineage` and `quarantine_records`).
+- Rerunning the identical source file against the database uses `INSERT ... ON CONFLICT DO UPDATE` (upserts), refreshing timestamps and attributes in-place without generating duplicate masters or duplicate lineage links.
+
+### 3. Restart & Crash Recovery
+- SQLite runs in **Write-Ahead Logging (WAL)** mode (`PRAGMA journal_mode=WAL`).
+- If a machine crash or power failure occurs mid-flight, SQLite automatically replays or discards the uncommitted WAL log upon reconnect, guaranteeing database integrity.
+
+### 4. Late-Arriving Data & Backfills
+- Survivorship evaluates each record's explicit `updated_at` source timestamp.
+- If an out-of-order or late-arriving older historical batch is ingested, the survivorship engine compares timestamps so the older record never overwrites newer, fresher values on the master entity.
 
 ---
 
@@ -203,7 +318,8 @@ Run the full automated test suite with `pytest`:
 pytest -v
 ```
 
-All 64 automated tests cover:
+All 72 automated tests cover:
+- Fast REST API endpoints and data contract integration (`test_api.py`)
 - Schema validation, data types, and boundary checks
 - Missing required header columns and schema drift
 - Malformed rows and duplicate source keys within a batch
