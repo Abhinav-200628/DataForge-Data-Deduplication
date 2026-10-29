@@ -77,3 +77,42 @@ def test_retry_after_failure_succeeds(tmp_path: Path):
     assert repo.get_master_count(EntityType.CUSTOMER) == 1
     assert repo.get_lineage_count(EntityType.CUSTOMER) == 1
 
+
+def test_export_outputs_fallback_when_pandas_numpy_unavailable(tmp_path: Path):
+    """
+    Verify that export_outputs gracefully falls back to standard library csv/json
+    if pandas or numpy cannot be imported, preventing test failures and pipeline crashes.
+    """
+    import unittest.mock as mock
+
+    db_file = tmp_path / "fallback_export.db"
+    out_dir = tmp_path / "fallback_out"
+    sample_csv = tmp_path / "sample.csv"
+
+    sample_csv.write_text(
+        "source_system,source_record_id,first_name,last_name,updated_at\n"
+        "CRM,S-1,Clark,Kent,2026-01-01T00:00:00Z\n",
+        encoding="utf-8",
+    )
+
+    pipeline = DeduplicationPipeline(
+        entity_type=EntityType.CUSTOMER,
+        db_path=db_file,
+        output_dir=out_dir,
+    )
+
+    # Force pandas import to raise ImportError
+    with mock.patch.dict("sys.modules", {"pandas": None}):
+        metrics = pipeline.run(input_path=sample_csv, run_id="FALLBACK-RUN")
+
+    assert metrics.status == RunStatus.COMPLETED
+    assert (out_dir / "customer_masters.csv").exists()
+    assert (out_dir / "customer_masters.json").exists()
+    assert (out_dir / "customer_lineage.csv").exists()
+    assert (out_dir / "customer_lineage.json").exists()
+    assert (out_dir / "customer_quarantine.csv").exists()
+    assert (out_dir / "customer_quarantine.json").exists()
+    assert (out_dir / "customer_review_queue.csv").exists()
+    assert (out_dir / "customer_review_queue.json").exists()
+
+

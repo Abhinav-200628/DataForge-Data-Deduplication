@@ -67,10 +67,12 @@ class ReportGenerator:
                 for row in lin_cursor.fetchall()
             ]
 
-            # 4. Fetch Master Record Count
-            table_name = "master_customers" if entity_type == EntityType.CUSTOMER.value else "master_products"
-            m_cursor = conn.execute(f"SELECT COUNT(*) FROM {table_name}")
-            total_masters = m_cursor.fetchone()[0]
+            # 4. Fetch Master Record Count for this run
+            lin_master_cursor = conn.execute(
+                "SELECT COUNT(DISTINCT master_id) FROM record_lineage WHERE run_id = ?",
+                (run_id,),
+            )
+            total_masters = lin_master_cursor.fetchone()[0]
 
             # 5. Deduplication Efficiency Ratio
             valid_count = run_dict.get("valid_count", 0)

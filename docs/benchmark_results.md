@@ -12,6 +12,24 @@ This document records the official performance benchmark execution for the **100
 
 ---
 
+## Multi-Scale Benchmark Comparison (1,000 vs. 10,000 vs. 100,000 Records)
+
+| Metric | 1,000 Records | 10,000 Records | 100,000 Records |
+| :--- | :--- | :--- | :--- |
+| **Total Ingestion Volume** | 1,000 | 10,000 | 100,000 |
+| **Valid Processed Records** | 950 | 9,500 | 95,000 |
+| **Quarantined Records** | 50 | 500 | 5,000 |
+| **Conservation Law Check** | `1000 == 950 + 50` (PASS) | `10000 == 9500 + 500` (PASS) | `100000 == 95000 + 5000` (PASS) |
+| **Golden Masters Produced** | 837 | 8,351 | 91,776 |
+| **Pairwise Precision** | **100.00%** | **100.00%** | **100.00%** |
+| **Pairwise Recall** | **100.00%** | **100.00%** | **100.00%** |
+| **F1 Score** | **1.0000** | **1.0000** | **1.0000** |
+| **Pipeline Elapsed Time** | 10.51s | 11.64s | 1685.03s (~28 min) |
+| **Peak Traced Memory** | 84.08 MB | 93.43 MB | 814.85 MB |
+| **Throughput** | 95.2 records/sec | 859.1 records/sec | 59.3 records/sec |
+
+---
+
 ## 1. Hardware & System Profile
 
 | Specification | Value |
@@ -96,3 +114,4 @@ The 100k benchmark produced complete audit outputs in both CSV and JSON:
 - `customer_quarantine.csv` (3.9 MB) / `customer_quarantine.json` (4.9 MB)
 - `customer_review_queue.csv` (3.8 MB) / `customer_review_queue.json` (6.7 MB)
 - `benchmark_report.md` (Operational report)
+

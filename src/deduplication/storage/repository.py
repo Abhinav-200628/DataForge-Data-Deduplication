@@ -5,6 +5,7 @@ unique constraints, idempotent reruns, and safe file export.
 
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 import sqlite3
@@ -291,6 +292,43 @@ class SQLiteRepository:
             ]
             conn.executemany(review_sql, review_rows)
 
+    @staticmethod
+    def _export_query_to_csv_json(
+        conn: sqlite3.Connection,
+        query: str,
+        csv_path: Path,
+        json_path: Path,
+        params: tuple[Any, ...] = (),
+    ) -> None:
+        """
+        Export SQL query results to CSV and JSON.
+        Uses pandas if available, with resilient fallback to Python's standard library
+        csv and json modules to ensure zero failures if NumPy/pandas cannot be loaded.
+        """
+        try:
+            import pandas as pd
+            df = pd.read_sql_query(query, conn, params=params if params else None)
+            df.to_csv(csv_path, index=False)
+            df.to_json(json_path, orient="records", indent=2)
+            return
+        except (ImportError, Exception):
+            pass
+
+        # Standard library fallback
+        cursor = conn.execute(query, params)
+        cols = [desc[0] for desc in cursor.description] if cursor.description else []
+        rows = cursor.fetchall()
+
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(cols)
+            for row in rows:
+                writer.writerow([row[col] for col in cols])
+
+        records = [{col: row[col] for col in cols} for row in rows]
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(records, f, indent=2, ensure_ascii=False)
+
     def export_outputs(self, output_dir: Union[str, Path], entity_type: EntityType) -> dict[str, Path]:
         """
         Export master records, lineage, quarantine, and review queues to CSV and JSON files.
@@ -299,49 +337,51 @@ class SQLiteRepository:
         out_path.mkdir(parents=True, exist_ok=True)
         exported_files: dict[str, Path] = {}
 
-        import pandas as pd
-
         with self._get_connection() as conn:
             # Export Master Records
             table_name = "master_customers" if entity_type == EntityType.CUSTOMER else "master_products"
-            df_masters = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
             csv_masters = out_path / f"{entity_type.value.lower()}_masters.csv"
             json_masters = out_path / f"{entity_type.value.lower()}_masters.json"
-            df_masters.to_csv(csv_masters, index=False)
-            df_masters.to_json(json_masters, orient="records", indent=2)
+            self._export_query_to_csv_json(conn, f"SELECT * FROM {table_name}", csv_masters, json_masters)
             exported_files["masters_csv"] = csv_masters
             exported_files["masters_json"] = json_masters
 
             # Export Lineage
-            df_lineage = pd.read_sql_query(
-                "SELECT * FROM record_lineage WHERE entity_type = ?", conn, params=(entity_type.value,)
-            )
             csv_lineage = out_path / f"{entity_type.value.lower()}_lineage.csv"
             json_lineage = out_path / f"{entity_type.value.lower()}_lineage.json"
-            df_lineage.to_csv(csv_lineage, index=False)
-            df_lineage.to_json(json_lineage, orient="records", indent=2)
+            self._export_query_to_csv_json(
+                conn,
+                "SELECT * FROM record_lineage WHERE entity_type = ?",
+                csv_lineage,
+                json_lineage,
+                params=(entity_type.value,),
+            )
             exported_files["lineage_csv"] = csv_lineage
             exported_files["lineage_json"] = json_lineage
 
             # Export Quarantine
-            df_quarantine = pd.read_sql_query(
-                "SELECT * FROM quarantine_records WHERE entity_type = ?", conn, params=(entity_type.value,)
-            )
             csv_quarantine = out_path / f"{entity_type.value.lower()}_quarantine.csv"
             json_quarantine = out_path / f"{entity_type.value.lower()}_quarantine.json"
-            df_quarantine.to_csv(csv_quarantine, index=False)
-            df_quarantine.to_json(json_quarantine, orient="records", indent=2)
+            self._export_query_to_csv_json(
+                conn,
+                "SELECT * FROM quarantine_records WHERE entity_type = ?",
+                csv_quarantine,
+                json_quarantine,
+                params=(entity_type.value,),
+            )
             exported_files["quarantine_csv"] = csv_quarantine
             exported_files["quarantine_json"] = json_quarantine
 
             # Export Manual Review Queue
-            df_review = pd.read_sql_query(
-                "SELECT * FROM manual_review_queue WHERE entity_type = ?", conn, params=(entity_type.value,)
-            )
             csv_review = out_path / f"{entity_type.value.lower()}_review_queue.csv"
             json_review = out_path / f"{entity_type.value.lower()}_review_queue.json"
-            df_review.to_csv(csv_review, index=False)
-            df_review.to_json(json_review, orient="records", indent=2)
+            self._export_query_to_csv_json(
+                conn,
+                "SELECT * FROM manual_review_queue WHERE entity_type = ?",
+                csv_review,
+                json_review,
+                params=(entity_type.value,),
+            )
             exported_files["review_csv"] = csv_review
             exported_files["review_json"] = json_review
 

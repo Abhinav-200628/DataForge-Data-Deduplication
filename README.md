@@ -89,7 +89,7 @@ source .venv/bin/activate
 ```bash
 pip install -r requirements.txt
 # Or install directly:
-pip install pandas rapidfuzz pytest
+pip install numpy pandas rapidfuzz pytest
 ```
 
 ### 3. Link Project Package
@@ -107,8 +107,16 @@ The pipeline provides 5 subcommands via `python -m deduplication.cli`:
 ### 1. Generate Synthetic Data
 Generates realistic customer or product datasets with known duplicate groups, variations, and isolated ground-truth labels:
 ```bash
+# Customer Dataset
 python -m deduplication.cli generate-data \
     --entity customer \
+    --count 1000 \
+    --seed 42 \
+    --output-dir data/sample
+
+# Product Dataset
+python -m deduplication.cli generate-data \
+    --entity product \
     --count 1000 \
     --seed 42 \
     --output-dir data/sample
@@ -117,11 +125,19 @@ python -m deduplication.cli generate-data \
 ### 2. Run the Deduplication Pipeline
 Executes the full deduplication lifecycle on an input CSV:
 ```bash
+# Run Customer Deduplication
 python -m deduplication.cli run \
     --entity customer \
-    --input data/sample/customers_1000.csv \
-    --db pipeline.db \
-    --output-dir output
+    --input data/sample/customers_500.csv \
+    --db output/pipeline.db \
+    --output-dir output/customer
+
+# Run Product Deduplication
+python -m deduplication.cli run \
+    --entity product \
+    --input data/sample/products_500.csv \
+    --db output/pipeline.db \
+    --output-dir output/product
 ```
 
 ### 3. Check Rerun Idempotency
@@ -129,8 +145,9 @@ Rerunning the exact same file against the same database produces identical resul
 ```bash
 python -m deduplication.cli run \
     --entity customer \
-    --input data/sample/customers_1000.csv \
-    --db pipeline.db
+    --input data/sample/customers_500.csv \
+    --db output/pipeline.db \
+    --output-dir output/customer
 ```
 
 ### 4. Generate Validation & Reconciliation Report
@@ -138,8 +155,8 @@ Produces a complete Markdown or JSON report verifying data quality, reconciliati
 ```bash
 python -m deduplication.cli report \
     --run-id <RUN_ID> \
-    --db pipeline.db \
-    --ground-truth data/sample/customers_1000_ground_truth.json \
+    --db output/pipeline.db \
+    --ground-truth data/sample/customers_500_ground_truth.json \
     --format markdown
 ```
 
@@ -147,20 +164,35 @@ python -m deduplication.cli report \
 Lists borderline or ambiguous candidate records flagged for human review:
 ```bash
 python -m deduplication.cli review \
-    --db pipeline.db \
+    --db output/pipeline.db \
     --list \
     --limit 10
 ```
 
 ### 6. Run Scale Performance Benchmark
-Runs a performance and throughput test on a large dataset:
+Runs a performance, throughput, and memory test on a large synthetic dataset:
 ```bash
 python -m deduplication.cli benchmark \
     --entity customer \
-    --count 10000 \
+    --count 1000 \
     --db benchmark.db \
-    --output-dir benchmark_output
+    --output-dir benchmark_1k
 ```
+
+---
+
+## Generated Output Artifacts & Their Meanings
+
+When a pipeline run finishes, it writes dual-format (`CSV` and `JSON`) audit files into `--output-dir` and persists all tables to SQLite:
+
+| Output File | Format | Purpose & Description |
+| :--- | :--- | :--- |
+| `*_masters.csv` / `.json` | CSV, JSON | **Golden Master Records**: Canonical entity identities produced after survivorship resolution, source priority, and UUIDv5 assignment. |
+| `*_lineage.csv` / `.json` | CSV, JSON | **Full Audit Lineage**: Maps every valid source record (`source_system`, `source_record_id`) to its assigned `master_id` with match decision, rule ID, and confidence score. |
+| `*_quarantine.csv` / `.json` | CSV, JSON | **Quarantine Store**: Stores all rejected records with their original raw payload, line numbers, and structured validation error codes (`MISSING_REQUIRED_FIELD`, `INVALID_DATA_TYPE`, `MALFORMED_DATE`, etc.). |
+| `*_review_queue.csv` / `.json` | CSV, JSON | **Manual Review Queue**: Holds ambiguous candidate pairs, shared-contact alerts, or hard-conflict vetoes that require human steward inspection. |
+| `validation_report.md` | Markdown | **Operational Audit Report**: Mathematical reconciliation balance check ($\text{Input} = \text{Valid} + \text{Quarantine}$), deduplication ratio, quarantine distribution, and precision/recall evaluation. |
+| `pipeline.db` | SQLite | **Persistent ACID Store**: SQLite database containing all normalized tables (`master_customers`, `master_products`, `record_lineage`, `quarantine_records`, `manual_review_queue`, `pipeline_runs`) in WAL mode. |
 
 ---
 
@@ -171,11 +203,12 @@ Run the full automated test suite with `pytest`:
 pytest -v
 ```
 
-All 63 automated tests cover:
+All 64 automated tests cover:
 - Schema validation, data types, and boundary checks
 - Missing required header columns and schema drift
 - Malformed rows and duplicate source keys within a batch
 - Partial failure recovery and atomic database transaction rollback
+- Resilient output export fallback to standard library when pandas/numpy is unavailable
 - Phone, email, address, SKU, and UPC check digit normalizers
 - Exact matching, corroborated probable matching, and borderline review cases
 - Hard-conflict vetoes (Tax ID, DOB, UPC, Brand)
@@ -192,25 +225,22 @@ All 63 automated tests cover:
 
 ---
 
-## 100,000-Record Performance Benchmark Results
+## Multi-Scale Performance Benchmark Results
 
-The pipeline includes a production-grade benchmark harness verified at **100,000 customer records** (`customers_100000.csv` ~16.4 MB):
+The pipeline has been rigorously verified across **1,000**, **10,000**, and **100,000** record synthetic datasets. All runs were executed on a standard developer workstation (Windows 11, AMD/Intel x86_64, 16 logical cores) without distributed infrastructure:
 
-| Benchmark Metric | Measured Result | Significance |
-| :--- | :--- | :--- |
-| **Input Records** | `100,000` | Full batch load |
-| **Valid Processed Records** | `95,000` | Schema-validated, normalized, and resolved |
-| **Quarantined Records** | `5,000` | Preserved in quarantine store with root causes |
-| **Reconciliation Balance** | `100,000 == 95,000 + 5,000` | **PASSED** (Strict conservation law enforced) |
-| **Golden Master Records** | `91,776` | Final canonical master entities produced |
-| **Pairwise Precision** | **`100.00%`** | **Zero false merges** (Conservative MDM safeguards hold) |
-| **Pairwise Recall** | **`100.00%`** | Zero true duplicates missed |
-| **F1 Score** | **`1.0000`** | Complete accuracy against isolated ground-truth labels |
-| **Pipeline Elapsed Time** | `1685.03s` (~28.08 min) | End-to-end processing including dual CSV/JSON exports |
-| **Peak Memory Footprint** | `814.85 MB` | Traced with `tracemalloc` (under 1 GB RAM usage) |
-| **Throughput** | `59.3 records/second` | Single-node SQLite and CPU execution |
+| Dataset Scale | Total Input | Valid Records | Quarantined | Pipeline Elapsed | Peak Memory | Throughput | Pairwise Precision | Pairwise Recall | F1 Score |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **1,000 records** | `1,000` | `950` | `50` | `10.51s` | `84.08 MB` | `95.2 rec/s` | **`100.00%`** | **`100.00%`** | **`1.0000`** |
+| **10,000 records** | `10,000` | `9,500` | `500` | `11.64s` | `93.43 MB` | `859.1 rec/s` | **`100.00%`** | **`100.00%`** | **`1.0000`** |
+| **100,000 records** | `100,000` | `95,000` | `5,000` | `1685.03s` (~28 min) | `814.85 MB` | `59.3 rec/s` | **`100.00%`** | **`100.00%`** | **`1.0000`** |
 
-For the complete technical breakdown and machine hardware profile, see [docs/benchmark_results.md](docs/benchmark_results.md).
+### Key Benchmark Takeaways
+1. **Mathematical Conservation Strictly Preserved**: Across all scales, $\text{Input} = \text{Valid} + \text{Quarantined}$ holds with 0 discrepancies.
+2. **Zero False Merges**: Across all scales, pairwise precision is **100.00%** against ground-truth duplicate clusters, proving the efficacy of multi-pass blocking, hard-conflict safeguards, and transitive cluster conflict auditing.
+3. **Sub-Gigabyte Memory Footprint**: Even at 100,000 records, peak traced memory stayed under **815 MB**, making it fully runnable on standard laptop developer hardware.
+
+For the exhaustive technical breakdown, machine specifications, and distribution tables, see [docs/benchmark_results.md](docs/benchmark_results.md).
 
 ---
 
