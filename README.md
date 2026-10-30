@@ -67,6 +67,7 @@ data-deduplication-pipeline/
 │   ├── sample/               # Sample datasets and isolated ground truth
 │   └── synthetic/            # Large generated scale datasets
 ├── docs/
+│   ├── ai_transparency_and_prompts.md # AI prompt history & transparency disclosure (YottaFlex Req 03)
 │   ├── architecture.md       # Architecture, transitive merge protection, and design diagrams
 │   ├── benchmark_results.md  # Official 100,000-record scale benchmark audit report
 │   └── data_dictionary.md    # Schemas, field constraints, and rejection taxonomy
@@ -379,6 +380,16 @@ For the exhaustive technical breakdown, machine specifications, and distribution
 ### 4. Ground-Truth Isolation
 - Synthetic data generation stores expected duplicate clusters in a separate JSON file (`customers_ground_truth.json`).
 - The input CSV contains **no answer labels or cheat columns**, ensuring pipeline evaluation reflects true real-world data engineering conditions.
+
+---
+
+## AI Transparency & Prompt History Disclosure
+*(In accordance with YottaFlex AI Submission Guidelines Requirement 03)*
+
+AI pair programming tools (Google Antigravity / Gemini) were used collaboratively throughout this project.
+- **Where AI accelerated development**: Boilerplate Pydantic schemas, initial RapidFuzz token matchers, Soundex phonetic block builders, parametric pytest fixtures, and React/Tailwind UI scaffolding.
+- **What was personally reviewed and validated**: Conservative precision-first business rules, hard-conflict vetoes, transitive cluster partitioning, SQLite ACID transaction rollbacks, zero-duplicate idempotency, and the 100,000-record scale benchmark verification.
+- **Full Prompt History & Disclosure**: For the complete chronological prompt transcript and disclosure log, see **[docs/ai_transparency_and_prompts.md](docs/ai_transparency_and_prompts.md)**.
 
 ---
 
