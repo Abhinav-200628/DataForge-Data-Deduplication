@@ -91,3 +91,4 @@ Build a Professional Enterprise Frontend for Data Deduplication Pipeline:
 3. Build one-click Windows launcher scripts (start.ps1 and start.bat) to run both backend and frontend simultaneously.
 4. Resolve Git authentication mismatch in Windows Credential Manager to push directly under candidate account.
 ```
+
